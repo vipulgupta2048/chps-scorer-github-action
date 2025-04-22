@@ -42,8 +42,11 @@ jobs:
           image: REPLACE_WITH:YOUR_IMAGE
           dockerfile: ./Dockerfile
 
-      - name: Create Issue If Problems Found
-        if: steps.chps-scorer.outputs.create_issue == 'true'
+      - name: Write CHPS Report to File
+          run: |
+            echo "${{ steps.chps-score.outputs.output }}" > chps-report.md
+
+      - name: Create Issue 
         uses: peter-evans/create-issue-from-file@v5
         with:
           title: Container Security Issues Detected
@@ -64,11 +67,7 @@ jobs:
 
 | Output         | Description                                              |
 |----------------|----------------------------------------------------------|
-| result         | Raw JSON output from the CHPs scoring                    |
-| overall_grade  | Overall grade (A+, A, B, C, D, E)                        |
-| score          | Total score achieved                                     |
-| max_score      | Maximum possible score                                   |
-| create_issue   | Whether findings should trigger an issue (true/false)    |
+| output   | Whether findings should trigger an issue (true/false)    |
 
 ## Examples
 
@@ -81,7 +80,7 @@ jobs:
     image: nginx:latest
 ```
 
-### Scan with Dockerfile context
+### Create a GitHub issue with the report
 
 ```yaml
 - name: Scan custom image with Dockerfile
@@ -89,7 +88,21 @@ jobs:
   with:
     image: my-custom-image:latest
     dockerfile: ./path/to/Dockerfile
+
+- name: Write CHPS Report to File
+  run: |
+    echo "${{ steps.chps-score.outputs.output }}" > chps-report.md
+
+- name: Create Issue from File
+  uses: peter-evans/create-issue-from-file@v4
+  with:
+    title: CHPS Security Findings
+    content-filepath: chps-report.md
+    labels: security, docker, chps-scorer
 ```
+
+Example issue: https://github.com/vipulgupta2048/chps-scorer-github-action/issues/3
+
 
 ### Skip CVE scanning for faster results
 

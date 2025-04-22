@@ -6,10 +6,6 @@ inputs:
   image:
     description: 'Container image to scan (e.g., nginx:latest)'
     required: true
-  output-format:
-    description: 'Output format (default: normal output, options: json)'
-    required: false
-    default: 'json'
   skip-cves:
     description: 'Skip CVE scanning'
     required: false
@@ -17,61 +13,65 @@ inputs:
   dockerfile:
     description: 'Path to Dockerfile for additional checks'
     required: false
+  output:
+    description: 'Output format (text or json)'
+    required: false
+    default: 'text'
 
 outputs:
-  result:
-    description: 'Raw JSON output from the CHPS scoring'
-    value: ${{ steps.run-scorer.outputs.stdout }}
-  overall_grade:
-    description: 'Overall grade (A+, A, B, C, D, E)'
-    value: ${{ steps.process-results.outputs.overall_grade }}
-  score:
-    description: 'Total score achieved'
-    value: ${{ steps.process-results.outputs.score }}
-  max_score:
-    description: 'Maximum possible score'
-    value: ${{ steps.process-results.outputs.max_score }}
-  create_issue:
-    description: 'Whether findings should trigger an issue (true/false)'
-    value: ${{ steps.process-results.outputs.create_issue }}
+  output:
+    description: 'Raw output from the CHPs scoring script (text or JSON, as requested)'
+    value: ${{ steps.run-scorer.outputs.output }}
 
 runs:
-  using: 'composite'
+  using: "composite"
   steps:
-    - name: Run CHPS Scorer
+    - name: Pull target image
+      shell: bash
+      run: docker pull ${{ inputs.image }}
+
+    - name: Run CHPs Scorer
       id: run-scorer
-      uses: docker://ghcr.io/vipulgupta2048/chps-scorer:latest
-      with:
-        args: >
-          ${{ inputs.skip-cves == 'true' && '--skip-cves' || '' }}
-          ${{ inputs.output-format == 'json' && '-o json' || '-o json' }}
-          ${{ inputs.dockerfile != '' && format('-d {0}', inputs.dockerfile) || '' }}
-          ${{ inputs.image }}
-      
-    - name: Process Results
-      id: process-results
       shell: bash
       run: |
-        # Store the raw output
-        echo "result<<EOF" >> $GITHUB_OUTPUT
-        echo "${{ steps.run-scorer.outputs.stdout }}" >> $GITHUB_OUTPUT
-        echo "EOF" >> $GITHUB_OUTPUT
-        
-        # Parse the JSON output
-        RESULT_JSON="${{ steps.run-scorer.outputs.stdout }}"
-        OVERALL_GRADE=$(echo "$RESULT_JSON" | jq -r '.overall.grade')
-        SCORE=$(echo "$RESULT_JSON" | jq -r '.overall.score')
-        MAX_SCORE=$(echo "$RESULT_JSON" | jq -r '.overall.max')
-        
-        echo "overall_grade=$OVERALL_GRADE" >> $GITHUB_OUTPUT
-        echo "score=$SCORE" >> $GITHUB_OUTPUT
-        echo "max_score=$MAX_SCORE" >> $GITHUB_OUTPUT
-        
-        if [[ "$OVERALL_GRADE" != "A+" ]]; then
-          echo "create_issue=true" >> $GITHUB_OUTPUT
-        else
-          echo "create_issue=false" >> $GITHUB_OUTPUT
+        # Prepare command arguments
+        ARGS=""
+
+        # Add output format flag if json
+        if [ "${{ inputs.output }}" == "json" ]; then
+          ARGS="$ARGS -o json"
         fi
+
+        # Add skip-cves flag if enabled
+        if [ "${{ inputs.skip-cves }}" == "true" ]; then
+          ARGS="$ARGS --skip-cves"
+        fi
+
+        # Add dockerfile path if provided
+        if [ -n "${{ inputs.dockerfile }}" ]; then
+          DOCKERFILE="${{ inputs.dockerfile }}"
+          # Check if file exists
+          if [ ! -f "$DOCKERFILE" ]; then
+            echo "::error::Dockerfile not found at $DOCKERFILE"
+            exit 1
+          fi
+          ARGS="$ARGS -d $DOCKERFILE"
+        fi
+
+        # Run the CHPs scorer in a container
+        RESULTS=$(docker run --privileged \
+          --volume /var/run/docker.sock:/var/run/docker.sock \
+          --volume $(pwd):/workspace \
+          --workdir /workspace \
+          ghcr.io/chps-dev/chps-scorer:latest \
+          $ARGS ${{ inputs.image }})
+
+        # Remove ANSI escape codes from the output
+        CLEANED_RESULTS=$(echo "$RESULTS" | sed -r 's/\x1B\[[0-9;]*[mK]//g')
+
+        echo "output<<EOF" >> $GITHUB_OUTPUT
+        echo "$CLEANED_RESULTS" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
 
 branding:
   icon: 'shield'
