@@ -64,11 +64,7 @@ jobs:
 
 | Output         | Description                                              |
 |----------------|----------------------------------------------------------|
-| result         | Raw JSON output from the CHPs scoring                    |
-| overall_grade  | Overall grade (A+, A, B, C, D, E)                        |
-| score          | Total score achieved                                     |
-| max_score      | Maximum possible score                                   |
-| create_issue   | Whether findings should trigger an issue (true/false)    |
+| output   | Whether findings should trigger an issue (true/false)    |
 
 ## Examples
 
