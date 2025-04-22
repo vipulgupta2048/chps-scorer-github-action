@@ -44,7 +44,7 @@ runs:
 
     - name: Run CHPS Scorer
       id: run-scorer
-      uses: ghcr.io/chps-dev/chps-scorer:latest
+      uses: chps-dev/chps-scorer:latest
       with:
         args: >
           --privileged
