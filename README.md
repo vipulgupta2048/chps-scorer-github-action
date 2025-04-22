@@ -77,7 +77,7 @@ jobs:
     image: nginx:latest
 ```
 
-### Scan with Dockerfile context
+### Create a GitHub issue with the report
 
 ```yaml
 - name: Scan custom image with Dockerfile
@@ -85,7 +85,21 @@ jobs:
   with:
     image: my-custom-image:latest
     dockerfile: ./path/to/Dockerfile
+
+- name: Write CHPS Report to File
+  run: |
+    echo "${{ steps.chps-score.outputs.output }}" > chps-report.md
+
+- name: Create Issue from File
+  uses: peter-evans/create-issue-from-file@v4
+  with:
+    title: CHPS Security Findings
+    content-filepath: chps-report.md
+    labels: security, docker, chps-scorer
 ```
+
+Example issue: https://github.com/vipulgupta2048/chps-scorer-github-action/issues/3
+
 
 ### Skip CVE scanning for faster results
 
