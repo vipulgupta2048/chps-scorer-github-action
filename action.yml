@@ -62,12 +62,12 @@ runs:
         fi
         
         # Run the CHPs scorer in a container with JSON output
-        RESULTS=$(docker run --privileged -o json \
+        RESULTS=$(docker run --privileged \
           --volume /var/run/docker.sock:/var/run/docker.sock \
           --volume $(pwd):/workspace \
           --workdir /workspace \
           ghcr.io/chps-dev/chps-scorer:latest \
-          $ARGS ${{ inputs.image }})
+          $ARGS -o json ${{ inputs.image }})
 
         echo "RESULTS: $RESULTS"
         
