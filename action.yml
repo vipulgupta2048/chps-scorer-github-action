@@ -68,6 +68,8 @@ runs:
           --workdir /workspace \
           ghcr.io/chps-dev/chps-scorer:latest \
           $ARGS ${{ inputs.image }})
+
+        echo "RESULTS: $RESULTS"
         
         # Set outputs directly from RESULTS
         OVERALL_GRADE=$(echo "$RESULTS" | jq -r '.overall.grade')
@@ -77,7 +79,6 @@ runs:
         
         echo "result<<EOF" >> $GITHUB_OUTPUT
         echo "$RESULTS" >> $GITHUB_OUTPUT
-        echo "EOF" >> $GITHUB_OUTPUT
         echo "overall_grade=$OVERALL_GRADE" >> $GITHUB_OUTPUT
         echo "score=$SCORE" >> $GITHUB_OUTPUT
         echo "max_score=$MAX_SCORE" >> $GITHUB_OUTPUT
