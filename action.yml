@@ -66,8 +66,11 @@ runs:
           ghcr.io/chps-dev/chps-scorer:latest \
           $ARGS ${{ inputs.image }})
 
+        # Remove ANSI escape codes from the output
+        CLEANED_RESULTS=$(echo "$RESULTS" | sed -r 's/\x1B\[[0-9;]*[mK]//g')
+
         echo "output<<EOF" >> $GITHUB_OUTPUT
-        echo "$RESULTS" >> $GITHUB_OUTPUT
+        echo "$CLEANED_RESULTS" >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
 
 branding:
