@@ -25,34 +25,8 @@ jobs:
         uses: ./
         with:
           image: nginx:latest  # Popular Docker image to scan
-          output: json
-
-      # Convert JSON output to markdown table
-      - name: Convert JSON to Markdown Table
-        id: convert-to-markdown
-        run: |
-          echo "# CHPS Security Findings" > chps-report.md
-          echo "" >> chps-report.md
-          echo "## Image Details" >> chps-report.md
-          echo "- **Image**: ${{ fromJson(steps.chps-score.outputs.output).image }}" >> chps-report.md
-          echo "- **Digest**: ${{ fromJson(steps.chps-score.outputs.output).digest }}" >> chps-report.md
-          echo "" >> chps-report.md
-          echo "## Scores" >> chps-report.md
-          echo "| Category       | Score | Max | Grade | Badge |" >> chps-report.md
-          echo "|----------------|-------|-----|-------|-------|" >> chps-report.md
-          for category in minimalism provenance configuration cves; do
-            score=$(echo '${{ steps.chps-score.outputs.output }}' | jq -r ".scores[\"$category\"].score")
-            max=$(echo '${{ steps.chps-score.outputs.output }}' | jq -r ".scores[\"$category\"].max")
-            grade=$(echo '${{ steps.chps-score.outputs.output }}' | jq -r ".scores[\"$category\"].grade")
-            badge=$(echo '${{ steps.chps-score.outputs.output }}' | jq -r ".scores[\"$category\"].badge")
-            echo "| $category | $score | $max | $grade | ![Badge]($badge) |" >> chps-report.md
-          done
-          echo "" >> chps-report.md
-          echo "## Overall Score" >> chps-report.md
-          echo "- **Score**: ${{ fromJson(steps.chps-score.outputs.output).overall.score }}/20" >> chps-report.md
-          echo "- **Grade**: ${{ fromJson(steps.chps-score.outputs.output).overall.grade }}" >> chps-report.md
-          echo "- ![Overall Badge](${{ fromJson(steps.chps-score.outputs.output).overall.badge }})" >> chps-report.md
-
+          
+          
       - name: Write CHPS Report to File
         run: |
           echo "${{ steps.chps-score.outputs.output }}" > chps-report.md
