@@ -26,38 +26,13 @@ jobs:
         with:
           image: nginx:latest  # Popular Docker image to scan
 
-      - name: Prepare Issue Content
-        if: steps.chps-score.outputs.create_issue == 'true'
-        id: prepare-issue
+      - name: Write CHPS Report to File
         run: |
-          mkdir -p .github/issues
-          cat > .github/issues/security-findings.md << EOF
-          ---
-          title: CHPS Security Findings for nginx:latest
-          labels: security, docker, chps-scorer
-          ---
-          ## CHPS Security Scan Report
-          
-          | Key | Value |
-          | --- | ----- |
-          | Image | nginx:latest |
-          | Scan Date | $(date +%Y-%m-%d) |
-          | Overall Grade | ${{ steps.chps-score.outputs.overall_grade }} |
-          | Overall Score | ${{ steps.chps-score.outputs.score }}/${{ steps.chps-score.outputs.max_score }} |
-          | Minimalism Score | $(echo '${{ steps.chps-score.outputs.result }}' | jq -r '.scores.minimalism.score')/$( echo '${{ steps.chps-score.outputs.result }}' | jq -r '.scores.minimalism.max') |
-          | Minimalism Grade | $(echo '${{ steps.chps-score.outputs.result }}' | jq -r '.scores.minimalism.grade') |
-          | Provenance Score | $(echo '${{ steps.chps-score.outputs.result }}' | jq -r '.scores.provenance.score')/$( echo '${{ steps.chps-score.outputs.result }}' | jq -r '.scores.provenance.max') |
-          | Provenance Grade | $(echo '${{ steps.chps-score.outputs.result }}' | jq -r '.scores.provenance.grade') |
-          | Configuration Score | $(echo '${{ steps.chps-score.outputs.result }}' | jq -r '.scores.configuration.score')/$( echo '${{ steps.chps-score.outputs.result }}' | jq -r '.scores.configuration.max') |
-          | Configuration Grade | $(echo '${{ steps.chps-score.outputs.result }}' | jq -r '.scores.configuration.grade') |
-          | CVEs Score | $(echo '${{ steps.chps-score.outputs.result }}' | jq -r '.scores.cves.score')/$( echo '${{ steps.chps-score.outputs.result }}' | jq -r '.scores.cves.max') |
-          | CVEs Grade | $(echo '${{ steps.chps-score.outputs.result }}' | jq -r '.scores.cves.grade') |
-          EOF
+          echo "${{ steps.chps-score.outputs.output }}" > chps-report.md
 
       - name: Create Issue from File
-        if: steps.chps-score.outputs.create_issue == 'true'
         uses: peter-evans/create-issue-from-file@v4
         with:
-          title: CHPS Security Findings for nginx:latest - Grade ${{ steps.chps-score.outputs.overall_grade }}
-          content-filepath: .github/issues/security-findings.md
+          title: CHPS Security Findings
+          content-filepath: chps-report.md
           labels: security, docker, chps-scorer
