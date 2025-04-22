@@ -6,10 +6,6 @@ inputs:
   image:
     description: 'Container image to scan (e.g., nginx:latest)'
     required: true
-  output-format:
-    description: 'Output format (options: json, text)'
-    required: false
-    default: 'json'
   skip-cves:
     description: 'Skip CVE scanning'
     required: false
@@ -48,10 +44,7 @@ runs:
       run: |
         # Prepare command arguments
         ARGS=""
-        
-        # Add output format
-        ARGS="$ARGS -o ${{ inputs.output-format }}"
-        
+                
         # Add skip-cves flag if enabled
         if [ "${{ inputs.skip-cves }}" == "true" ]; then
           ARGS="$ARGS --skip-cves"
@@ -93,9 +86,6 @@ runs:
         else
           echo "create_issue=false" >> $GITHUB_OUTPUT
         fi
-        # Save results to a file
-        echo "$RESULTS" > /tmp/chps-results.json
-        echo "Saved scanning results to temporary file"
     
     # - name: Process results
     #   id: scan-results
