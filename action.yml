@@ -38,16 +38,21 @@ outputs:
 runs:
   using: 'composite'
   steps:
+    - name: Pull target image
+      shell: bash
+      run: docker pull ${{ inputs.image }}
+
     - name: Run CHPS Scorer
       id: run-scorer
-      uses: docker://ghcr.io/vipulgupta2048/chps-scorer:latest
+      uses: ghcr.io/chps-dev/chps-scorer:latest
       with:
         args: >
+          --privileged
           ${{ inputs.skip-cves == 'true' && '--skip-cves' || '' }}
           ${{ inputs.output-format == 'json' && '-o json' || '-o json' }}
           ${{ inputs.dockerfile != '' && format('-d {0}', inputs.dockerfile) || '' }}
           ${{ inputs.image }}
-      
+
     - name: Process Results
       id: process-results
       shell: bash
@@ -56,17 +61,17 @@ runs:
         echo "result<<EOF" >> $GITHUB_OUTPUT
         echo "${{ steps.run-scorer.outputs.stdout }}" >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
-        
+
         # Parse the JSON output
         RESULT_JSON="${{ steps.run-scorer.outputs.stdout }}"
         OVERALL_GRADE=$(echo "$RESULT_JSON" | jq -r '.overall.grade')
         SCORE=$(echo "$RESULT_JSON" | jq -r '.overall.score')
         MAX_SCORE=$(echo "$RESULT_JSON" | jq -r '.overall.max')
-        
+
         echo "overall_grade=$OVERALL_GRADE" >> $GITHUB_OUTPUT
         echo "score=$SCORE" >> $GITHUB_OUTPUT
         echo "max_score=$MAX_SCORE" >> $GITHUB_OUTPUT
-        
+
         if [[ "$OVERALL_GRADE" != "A+" ]]; then
           echo "create_issue=true" >> $GITHUB_OUTPUT
         else
