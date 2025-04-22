@@ -7,7 +7,7 @@ inputs:
     description: 'Container image to scan (e.g., nginx:latest)'
     required: true
   output-format:
-    description: 'Output format (default: normal output, options: json)'
+    description: 'Output format (options: json, text)'
     required: false
     default: 'json'
   skip-cves:
@@ -21,62 +21,185 @@ inputs:
 outputs:
   result:
     description: 'Raw JSON output from the CHPS scoring'
-    value: ${{ steps.run-scorer.outputs.stdout }}
+    value: ${{ steps.scan-results.outputs.result }}
   overall_grade:
     description: 'Overall grade (A+, A, B, C, D, E)'
-    value: ${{ steps.process-results.outputs.overall_grade }}
+    value: ${{ steps.scan-results.outputs.overall_grade }}
   score:
     description: 'Total score achieved'
-    value: ${{ steps.process-results.outputs.score }}
+    value: ${{ steps.scan-results.outputs.score }}
   max_score:
     description: 'Maximum possible score'
-    value: ${{ steps.process-results.outputs.max_score }}
+    value: ${{ steps.scan-results.outputs.max_score }}
   create_issue:
     description: 'Whether findings should trigger an issue (true/false)'
-    value: ${{ steps.process-results.outputs.create_issue }}
+    value: ${{ steps.scan-results.outputs.create_issue }}
 
 runs:
-  using: 'composite'
+  using: "composite"
   steps:
     - name: Pull target image
       shell: bash
       run: docker pull ${{ inputs.image }}
-
-    - name: Run CHPS Scorer
+      
+    - name: Run CHPs Scorer
       id: run-scorer
-      uses: chps-dev/chps-scorer:latest
-      with:
-        args: >
-          --privileged
-          ${{ inputs.skip-cves == 'true' && '--skip-cves' || '' }}
-          ${{ inputs.output-format == 'json' && '-o json' || '-o json' }}
-          ${{ inputs.dockerfile != '' && format('-d {0}', inputs.dockerfile) || '' }}
-          ${{ inputs.image }}
-
-    - name: Process Results
-      id: process-results
       shell: bash
       run: |
-        # Store the raw output
+        # Prepare command arguments
+        ARGS=""
+        
+        # Add output format
+        ARGS="$ARGS -o ${{ inputs.output-format }}"
+        
+        # Add skip-cves flag if enabled
+        if [ "${{ inputs.skip-cves }}" == "true" ]; then
+          ARGS="$ARGS --skip-cves"
+        fi
+        
+        # Add dockerfile path if provided
+        if [ -n "${{ inputs.dockerfile }}" ]; then
+          DOCKERFILE="${{ inputs.dockerfile }}"
+          # Check if file exists
+          if [ ! -f "$DOCKERFILE" ]; then
+            echo "::error::Dockerfile not found at $DOCKERFILE"
+            exit 1
+          fi
+          ARGS="$ARGS -d $DOCKERFILE"
+        fi
+        
+        # Run the CHPs scorer in a container
+        RESULTS=$(docker run --privileged \
+          --volume /var/run/docker.sock:/var/run/docker.sock \
+          --volume $(pwd):/workspace \
+          --workdir /workspace \
+          ghcr.io/chps-dev/chps-scorer:latest \
+          $ARGS ${{ inputs.image }})
+        
+        # Set outputs directly from RESULTS
+        OVERALL_GRADE=$(echo "$RESULTS" | jq -r '.overall.grade')
+        SCORE=$(echo "$RESULTS" | jq -r '.overall.score')
+        MAX_SCORE=$(echo "$RESULTS" | jq -r '.overall.max')
+        PERCENTAGE=$(echo "$RESULTS" | jq -r '.overall.percentage')
+        
         echo "result<<EOF" >> $GITHUB_OUTPUT
-        echo "${{ steps.run-scorer.outputs.stdout }}" >> $GITHUB_OUTPUT
+        echo "$RESULTS" >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
-
-        # Parse the JSON output
-        RESULT_JSON="${{ steps.run-scorer.outputs.stdout }}"
-        OVERALL_GRADE=$(echo "$RESULT_JSON" | jq -r '.overall.grade')
-        SCORE=$(echo "$RESULT_JSON" | jq -r '.overall.score')
-        MAX_SCORE=$(echo "$RESULT_JSON" | jq -r '.overall.max')
-
         echo "overall_grade=$OVERALL_GRADE" >> $GITHUB_OUTPUT
         echo "score=$SCORE" >> $GITHUB_OUTPUT
         echo "max_score=$MAX_SCORE" >> $GITHUB_OUTPUT
-
         if [[ "$OVERALL_GRADE" != "A+" ]]; then
           echo "create_issue=true" >> $GITHUB_OUTPUT
         else
           echo "create_issue=false" >> $GITHUB_OUTPUT
         fi
+        # Save results to a file
+        echo "$RESULTS" > /tmp/chps-results.json
+        echo "Saved scanning results to temporary file"
+    
+    # - name: Process results
+    #   id: scan-results
+    #   shell: bash
+    #   run: |
+    #     # Read the results file
+    #     RESULTS=$(cat /tmp/chps-results.json)
+        
+    #     # Check if results are valid JSON
+    #     if ! echo "$RESULTS" | jq '.' > /dev/null 2>&1; then
+    #       echo "::error::Invalid JSON output from CHPs scorer"
+    #       exit 1
+    #     fi
+        
+    #     # Extract key information
+    #     OVERALL_GRADE=$(echo "$RESULTS" | jq -r '.overall.grade')
+    #     SCORE=$(echo "$RESULTS" | jq -r '.overall.score')
+    #     MAX_SCORE=$(echo "$RESULTS" | jq -r '.overall.max')
+    #     PERCENTAGE=$(echo "$RESULTS" | jq -r '.overall.percentage')
+        
+    #     # Set outputs
+    #     echo "result<<EOF" >> $GITHUB_OUTPUT
+    #     echo "$RESULTS" >> $GITHUB_OUTPUT
+    #     echo "EOF" >> $GITHUB_OUTPUT
+        
+    #     echo "overall_grade=$OVERALL_GRADE" >> $GITHUB_OUTPUT
+    #     echo "score=$SCORE" >> $GITHUB_OUTPUT
+    #     echo "max_score=$MAX_SCORE" >> $GITHUB_OUTPUT
+        
+    #     # Determine if an issue should be created (anything less than A+ needs attention)
+    #     if [[ "$OVERALL_GRADE" != "A+" ]]; then
+    #       echo "create_issue=true" >> $GITHUB_OUTPUT
+    #     else
+    #       echo "create_issue=false" >> $GITHUB_OUTPUT
+    #     fi
+        
+    #     # Create a markdown report
+    #     cat > ./chps-report.md << EOL
+    #     # 🔒 Container Security Report
+        
+    #     ## Summary
+        
+    #     Security scan performed on container image: \`${{ inputs.image }}\`
+        
+    #     **Overall Grade: ${OVERALL_GRADE}** (Score: ${SCORE}/${MAX_SCORE}, ${PERCENTAGE}%)
+        
+    #     ![Overall CHPs Score]($(echo "$RESULTS" | jq -r '.overall.badge'))
+        
+    #     ## Detailed Results
+        
+    #     | Security Vector | Grade | Score | Badge |
+    #     |-----------------|-------|-------|-------|
+    #     | **Minimalism** | $(echo "$RESULTS" | jq -r '.scores.minimalism.grade') | $(echo "$RESULTS" | jq -r '.scores.minimalism.score')/$(echo "$RESULTS" | jq -r '.scores.minimalism.max') | ![]($(echo "$RESULTS" | jq -r '.scores.minimalism.badge')) |
+    #     | **Provenance** | $(echo "$RESULTS" | jq -r '.scores.provenance.grade') | $(echo "$RESULTS" | jq -r '.scores.provenance.score')/$(echo "$RESULTS" | jq -r '.scores.provenance.max') | ![]($(echo "$RESULTS" | jq -r '.scores.provenance.badge')) |
+    #     | **Configuration** | $(echo "$RESULTS" | jq -r '.scores.configuration.grade') | $(echo "$RESULTS" | jq -r '.scores.configuration.score')/$(echo "$RESULTS" | jq -r '.scores.configuration.max') | ![]($(echo "$RESULTS" | jq -r '.scores.configuration.badge')) |
+    #     | **CVEs** | $(echo "$RESULTS" | jq -r '.scores.cves.grade') | $(echo "$RESULTS" | jq -r '.scores.cves.score')/$(echo "$RESULTS" | jq -r '.scores.cves.max') | ![]($(echo "$RESULTS" | jq -r '.scores.cves.badge')) |
+        
+    #     ## Recommendations
+        
+    #     EOL
+        
+    #     # Add specific recommendations based on scores
+    #     if [ $(echo "$RESULTS" | jq -r '.scores.minimalism.score') -lt $(echo "$RESULTS" | jq -r '.scores.minimalism.max') ]; then
+    #       echo "### 📦 Minimalism Improvements" >> ./chps-report.md
+    #       echo "" >> ./chps-report.md
+    #       echo "- Use smaller base images (e.g., alpine or distroless)" >> ./chps-report.md
+    #       echo "- Remove unnecessary packages and tools" >> ./chps-report.md
+    #       echo "- Reduce the number of layers in your image" >> ./chps-report.md
+    #       echo "" >> ./chps-report.md
+    #     fi
+        
+    #     if [ $(echo "$RESULTS" | jq -r '.scores.provenance.score') -lt $(echo "$RESULTS" | jq -r '.scores.provenance.max') ]; then
+    #       echo "### 🔏 Provenance Improvements" >> ./chps-report.md
+    #       echo "" >> ./chps-report.md
+    #       echo "- Sign your container images (e.g., using Cosign)" >> ./chps-report.md
+    #       echo "- Use trusted base images from verified publishers" >> ./chps-report.md
+    #       echo "- Generate Software Bill of Materials (SBOM)" >> ./chps-report.md
+    #       echo "- Implement supply chain security measures" >> ./chps-report.md
+    #       echo "" >> ./chps-report.md
+    #     fi
+        
+    #     if [ $(echo "$RESULTS" | jq -r '.scores.configuration.score') -lt $(echo "$RESULTS" | jq -r '.scores.configuration.max') ]; then
+    #       echo "### ⚙️ Configuration Improvements" >> ./chps-report.md
+    #       echo "" >> ./chps-report.md
+    #       echo "- Run containers as non-root users" >> ./chps-report.md
+    #       echo "- Apply least privilege principles" >> ./chps-report.md
+    #       echo "- Configure read-only filesystems where possible" >> ./chps-report.md
+    #       echo "- Set appropriate resource limits" >> ./chps-report.md
+    #       echo "" >> ./chps-report.md
+    #     fi
+        
+    #     if [ $(echo "$RESULTS" | jq -r '.scores.cves.score') -lt $(echo "$RESULTS" | jq -r '.scores.cves.max') ]; then
+    #       echo "### 🛡️ CVE Improvements" >> ./chps-report.md
+    #       echo "" >> ./chps-report.md
+    #       echo "- Update base images regularly" >> ./chps-report.md
+    #       echo "- Implement vulnerability scanning in CI/CD pipelines" >> ./chps-report.md
+    #       echo "- Address critical and high severity vulnerabilities promptly" >> ./chps-report.md
+    #       echo "- Consider using minimal images to reduce attack surface" >> ./chps-report.md
+    #       echo "" >> ./chps-report.md
+    #     fi
+        
+    #     echo "For more details, see the [CHPs specification](https://github.com/chps-dev/chps)" >> ./chps-report.md
+        
+    #     echo "Created detailed report in chps-report.md"
 
 branding:
   icon: 'shield'
