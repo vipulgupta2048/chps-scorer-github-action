@@ -26,10 +26,6 @@ outputs:
 runs:
   using: "composite"
   steps:
-    - name: Pull target image
-      shell: bash
-      run: docker pull ${{ inputs.image }}
-
     - name: Run CHPs Scorer
       id: run-scorer
       shell: bash
