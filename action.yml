@@ -14,9 +14,9 @@ inputs:
     description: 'Path to Dockerfile for additional checks'
     required: false
   output:
-    description: 'Output format (text or json)'
+    description: 'Output format'
     required: false
-    default: 'text'
+    default: 'html'
 
 outputs:
   output:

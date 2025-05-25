@@ -59,7 +59,7 @@ jobs:
 | Input          | Required | Default | Description                                               |
 |----------------|----------|---------|-----------------------------------------------------------|
 | image          | Yes      | -       | Container image to scan (e.g., nginx:latest)              |
-| output-format  | No       | json    | Output format (options: json)                             |
+| output-format  | No       | json    | Output format (options: json, text, html)                 |
 | skip-cves      | No       | false   | Skip CVE scanning                                         |
 | dockerfile     | No       | -       | Path to Dockerfile for additional checks                  |
 
